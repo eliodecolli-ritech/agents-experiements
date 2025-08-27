@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: fact_checker_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: fact_checker
+    volumes:
+      - mongodb_data:/data/db
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - fact_checker_network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: fact_checker_qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - fact_checker_network
+
+  # Optional: MongoDB Admin UI
+  mongo-express:
+    image: mongo-express:latest
+    container_name: fact_checker_mongo_ui
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password123@mongodb:27017/
+    depends_on:
+      - mongodb
+    networks:
+      - fact_checker_network
+
+volumes:
+  mongodb_data:
+    driver: local
+  qdrant_data:
+    driver: local
+
+networks:
+  fact_checker_network:
+    driver: bridge
