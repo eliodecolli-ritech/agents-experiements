@@ -27,6 +27,8 @@ fact-checker-system/data/HRDataset_v14.csv
 
 ### 2. Start Everything
 ```bash
+export OPENAI_API_KEY=your-key-here # if using OpenAI
+export HUGGINGFACE_TOKEN=your-key-here # if using Hugging Face models (e.g. Gemma)
 # Option 1: Full guided setup
 ./start-docker.sh
 
@@ -41,7 +43,9 @@ docker-compose run --rm pipeline-init
 ### 3. Access the System
 - **🌐 Web UI**: http://localhost:8080
 - **🔧 API**: http://localhost:8001  
-- **📊 Database**: http://localhost:8081 (admin/password123)
+- **📊 ZenML Dashboard**: http://localhost:8237
+- **📊 MongoDB Admin**: http://localhost:8081 (admin/password123)
+- **🔍 Qdrant UI**: http://localhost:6333/dashboard
 
 ## 🎯 Test Statements
 
