@@ -63,7 +63,7 @@ def clean_employee_data(df: pd.DataFrame) -> pd.DataFrame:
 def save_to_mongodb(df: pd.DataFrame) -> str:
     """Save cleaned data to MongoDB"""
     # Use authentication for Docker setup
-    client = pymongo.MongoClient("mongodb://admin:password123@localhost:27017/?authSource=admin")
+    client = pymongo.MongoClient("mongodb://admin:password123@mongodb:27017/?authSource=admin")
     db = client["fact_checker"]
     collection = db["employees"]
     

@@ -4,9 +4,9 @@ from langchain.prompts import ChatPromptTemplate
 from typing import Dict, Any
 import json
 
-from fact_check_state import FactCheckState, Evidence, FactCheckResult
-from rag_agent import RAGAgent
-from wikipedia_agent import WikipediaAgent
+from agents.fact_check_state import FactCheckState, Evidence, FactCheckResult
+from agents.enhanced_rag_agent import EnhancedRAGAgent
+from agents.wikipedia_agent import WikipediaAgent
 
 class LangGraphFactChecker:
     """LangGraph-based fact-checking orchestrator with fine-tuning support"""
@@ -24,7 +24,7 @@ class LangGraphFactChecker:
             self.llm = None  # We'll use simple rules
             self.wikipedia_agent = WikipediaAgent("google/gemma-3-4b-it")
         
-        self.rag_agent = RAGAgent()
+        self.rag_agent = EnhancedRAGAgent()
         self.use_openai = use_openai
         
         # Fine-tuning data collection
@@ -110,7 +110,9 @@ class LangGraphFactChecker:
             private_keywords = [
                 "our company", "our employees", "our department", "our sales",
                 "company", "employees", "department", "salary", "performance", 
-                "engagement", "workforce", "staff", "team"
+                "engagement", "workforce", "staff", "team", "males", "females",
+                "gender", "average salary", "more than", "less than", "exactly",
+                "production", "it", "sales", "hr", "finance", "engineering"
             ]
             
             # Public knowledge keywords  
@@ -407,7 +409,7 @@ if __name__ == "__main__":
     print("2. With OpenAI (costs money, needs API key)")
     
     # For now, default to local
-    use_openai = False  # Change to True if you want OpenAI
+    use_openai = True  # Change to True if you want OpenAI
     
     if use_openai:
         print("🌐 Using OpenAI GPT-4 + lighter local model")

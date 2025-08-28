@@ -14,7 +14,7 @@ def query_employee_data() -> List[Dict[str, Any]]:
     import json
     from bson import ObjectId
     
-    client = pymongo.MongoClient("mongodb://admin:password123@localhost:27017/?authSource=admin")
+    client = pymongo.MongoClient("mongodb://admin:password123@mongodb:27017/?authSource=admin")
     db = client["fact_checker"]
     collection = db["employees"]
     
@@ -99,7 +99,7 @@ def embed_employee_data(processed_data: List[Dict[str, Any]]) -> List[Dict[str, 
 @step
 def load_to_qdrant(embedded_data: List[Dict[str, Any]]) -> str:
     """Load embedded employee data to Qdrant vector database"""
-    client = QdrantClient("localhost", port=6333)
+    client = QdrantClient("qdrant", port=6333)
     
     collection_name = "employees"
     
