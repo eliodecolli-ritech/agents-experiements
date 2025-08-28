@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoProcessor
 import re
 import json
 from typing import List, Dict, Any, Optional, Tuple
-import wikipedia
+from wikipediaapi import Wikipedia, ExtractFormat
 from dataclasses import dataclass
 import os
 
@@ -129,9 +129,12 @@ class WikipediaAgent:
     def __init__(self, model_name: str = "google/gemma-3-4b-it"):
         self.tools = {}
         self.current_chat = []
-        # Configure Wikipedia library
-        wikipedia.set_lang("en")
-        wikipedia.set_user_agent("WikipediaFactChecker/1.0")
+        # Configure Wikipedia library (matching original notebook)
+        self.wikipedia = Wikipedia(
+            user_agent="WikipediaFactChecker/1.0", 
+            language="en", 
+            extract_format=ExtractFormat.WIKI
+        )
         
         # Initialize LLM
         self.llm = FactCheckLLM(model_name)
@@ -176,23 +179,16 @@ class WikipediaAgent:
         return f"<tool_result>{result}</tool_result>"
     
     def _content_downloader(self):
-        """Wikipedia content downloader tool"""
+        """Wikipedia content downloader tool (matching original notebook)"""
         def inner_downloader(title: str) -> str:
             try:
-                # Get Wikipedia page content
-                content = wikipedia.page(title).content
-                return content
-            except wikipedia.exceptions.DisambiguationError as e:
-                # If multiple pages, try the first option
-                try:
-                    content = wikipedia.page(e.options[0]).content
-                    return content
-                except:
-                    return f"Wikipedia disambiguation error for '{title}'"
-            except wikipedia.exceptions.PageError:
-                return f"Wikipedia page '{title}' not found"
+                wiki_page = self.wikipedia.page(title=title)
+                if wiki_page.exists():
+                    return wiki_page.text
+                else:
+                    return f"Wikipedia page '{title}' not found"
             except Exception as e:
-                return f"Wikipedia error: {str(e)}"
+                return f"Wikipedia error for '{title}': {str(e)}"
         return inner_downloader
     
     def initialize(self):

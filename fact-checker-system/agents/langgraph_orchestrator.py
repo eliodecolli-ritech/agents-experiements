@@ -179,7 +179,8 @@ class LangGraphFactChecker:
             return "wikipedia"
         else:
             return "llm_only"
-    
+
+    # For "mixed" statements, we do RAG first, then Wikipedia, then analysis.
     def _after_rag_decision(self, state: FactCheckState) -> str:
         """Decide what to do after RAG search"""
         
