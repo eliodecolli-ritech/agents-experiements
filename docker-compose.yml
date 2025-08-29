@@ -1,0 +1,176 @@
+# Complete Fact-Checker System - Docker Compose
+# Single command deployment: docker-compose up
+
+version: '3.8'
+
+services:
+  # ==================== INFRASTRUCTURE ====================
+  
+  mongodb:
+    image: mongo:6
+    container_name: fact-checker-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./fact-checker-system/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - fact-checker-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh mongodb://admin:password123@localhost:27017/admin --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: fact-checker-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - fact-checker-network
+
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: fact-checker-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password123@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: password123
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - fact-checker-network
+
+  # ==================== ZENML DASHBOARD ====================
+  
+  zenml-server:
+    build:
+      context: ./fact-checker-system
+      dockerfile: Dockerfile
+    container_name: fact-checker-zenml
+    command: bash -c "zenml init && zenml up --port 8237 --ip-address 0.0.0.0 --blocking"
+    ports:
+      - "8237:8237"  # ZenML dashboard
+    environment:
+      - ZENML_CONFIG_PATH=/app/.zenml
+      - ZENML_SERVER_HOST=0.0.0.0
+      - ZENML_SERVER_PORT=8237
+    volumes:
+      - zenml_data:/app/.zenml
+    networks:
+      - fact-checker-network
+    restart: unless-stopped
+
+  # ==================== PIPELINE INITIALIZATION ====================
+  
+  pipeline-init:
+    build:
+      context: ./fact-checker-system
+      dockerfile: Dockerfile
+    container_name: fact-checker-pipeline-init
+    command: python docker/init-pipelines.py
+    volumes:
+      - ./fact-checker-system/data:/app/data
+      - pipeline_logs:/app/logs
+      - zenml_data:/app/.zenml
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      zenml-server:
+        condition: service_started
+    networks:
+      - fact-checker-network
+    restart: "no"  # Run once only
+    profiles:
+      - init  # Only run with --profile init or when explicitly started
+
+  # ==================== APPLICATION SERVICES ====================
+  
+  fact-check-server:
+    build:
+      context: ./fact-checker-system
+      dockerfile: Dockerfile
+    container_name: fact-checker-server
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - FACTCHECK_HOST=0.0.0.0
+      - FACTCHECK_PORT=8001
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./fact-checker-system/data:/app/data
+      - server_logs:/app/logs
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    networks:
+      - fact-checker-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  spring-client:
+    build:
+      context: ./spring-http-client
+      dockerfile: Dockerfile
+    container_name: fact-checker-web-ui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - FACTCHECK_SERVER_URL=http://fact-check-server:8001
+      - SERVER_PORT=8080
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      fact-check-server:
+        condition: service_healthy
+    networks:
+      - fact-checker-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ==================== NETWORKS ====================
+
+networks:
+  fact-checker-network:
+    driver: bridge
+    name: fact-checker-network
+
+# ==================== VOLUMES ====================
+
+volumes:
+  mongodb_data:
+    name: fact-checker-mongodb-data
+  qdrant_data:
+    name: fact-checker-qdrant-data
+  pipeline_logs:
+    name: fact-checker-pipeline-logs
+  server_logs:
+    name: fact-checker-server-logs
+  zenml_data:
+    name: fact-checker-zenml-data
