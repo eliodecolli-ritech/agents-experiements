@@ -17,7 +17,8 @@ class LangGraphFactChecker:
         
         if use_openai:
             from langchain_openai import ChatOpenAI
-            self.llm = ChatOpenAI(model="gpt-4", temperature=0)
+            import os
+            self.llm = ChatOpenAI(model="gpt-5-nano", temperature=0)
             self.wikipedia_agent = WikipediaAgent("microsoft/DialoGPT-small")  # Lighter model
         else:
             # Use simple rule-based classification instead of LLM for now
@@ -250,25 +251,33 @@ class LangGraphFactChecker:
         wiki_ev = state.get("wikipedia_evidence", [])
         
         if self.use_openai and self.llm:
-            # Use LLM analysis
-            analysis_prompt = ChatPromptTemplate.from_template("""
+            # Use LLM analysis with Neil deGrasse Tyson style
+            neil_style = (
+                "You are Neil deGrasse Tyson, the renowned astrophysicist and science communicator. "
+                "Respond to the following claim with scientific rigor, clarity, and evidence-based reasoning. "
+                "Make your explanation educational and accessible, focusing on truth and verifiable facts. "
+                "If the claim references 'studies' or external sources, require explicit citations or verifiable data. If no credible source is provided, state that the claim cannot be verified."
+            )
+            analysis_prompt = ChatPromptTemplate.from_template(f"""
+            {neil_style}
+
             Analyze this statement for fact-checking:
-            
-            Statement: {statement}
-            
+
+            Statement: {{statement}}
+
             Evidence collected:
-            RAG Evidence: {rag_evidence}
-            Wikipedia Evidence: {wikipedia_evidence}
-            
+            RAG Evidence: {{rag_evidence}}
+            Wikipedia Evidence: {{wikipedia_evidence}}
+
             Provide a verdict (TRUE/FALSE/MISLEADING/UNVERIFIED/NEEDS_CONTEXT) and confidence score (0-1).
             Explain your reasoning based on the evidence.
-            
+
             Format as JSON:
-            {{
+            {{{{
                 "verdict": "verdict_here",
                 "confidence": 0.0,
                 "reasoning": "explanation here"
-            }}
+            }}}}
             """)
             
             chain = analysis_prompt | self.llm
