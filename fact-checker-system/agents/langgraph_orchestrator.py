@@ -18,11 +18,11 @@ class LangGraphFactChecker:
         if use_openai:
             from langchain_openai import ChatOpenAI
             self.llm = ChatOpenAI(model="gpt-4", temperature=0)
-            self.wikipedia_agent = WikipediaAgent("microsoft/DialoGPT-small")  # Lighter model
+            self.wikipedia_agent = WikipediaAgent()  # Lighter model
         else:
             # Use simple rule-based classification instead of LLM for now
             self.llm = None  # We'll use simple rules
-            self.wikipedia_agent = WikipediaAgent("google/gemma-3-4b-it")
+            self.wikipedia_agent = WikipediaAgent()
         
         self.rag_agent = EnhancedRAGAgent()
         self.use_openai = use_openai
