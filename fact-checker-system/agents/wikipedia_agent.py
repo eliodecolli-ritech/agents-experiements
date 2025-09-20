@@ -15,7 +15,7 @@ from google.genai.types import (
     GenerateContentConfig
 )
 from google.genai.client import Client
-from .utils.ducksearch import DuckSearch
+from utils.ducksearch import DuckSearch
 
 @dataclass(kw_only=True)
 class ToolCall:
@@ -257,7 +257,7 @@ class WikipediaAgent:
         self.current_chat = chat
         
         # Process until final result
-        max_iterations = 10
+        max_iterations = 50
         iteration = 0
 
         if not response:
@@ -300,7 +300,7 @@ class WikipediaAgent:
 # Example usage
 if __name__ == "__main__":
     agent = WikipediaAgent()
-    result = agent.process_fact_check("monkeys can play the guitar")
+    result = agent.process_fact_check("Mozart could beat Bethoveen in a fist fight")
     
     print("------------")
     print(f"Verdict: {result.verdict}")
