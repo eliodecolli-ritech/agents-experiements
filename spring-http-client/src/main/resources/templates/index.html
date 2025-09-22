@@ -82,7 +82,7 @@
                                     <span th:errors="*{statement}">Statement error</span>
                                 </div>
                                 <div class="form-text">
-                                    Examples: "Our company has 200 employees" or "Tesla was founded in 2003"
+                                    Examples: "Our company has 200 employees" or "Robert De Niro is from Albania"
                                 </div>
                             </div>
 
@@ -159,14 +159,11 @@
                                 </div>
                                 <div class="col-md-6">
                                     <h6 class="fw-bold">Confidence:</h6>
-                                    <div class="progress" style="height: 25px;">
-                                        <div class="progress-bar" 
-                                             th:classappend="'bg-' + ${factCheckResponse.verdictClass}"
-                                             th:style="'width: ' + ${factCheckResponse.confidencePercentage}"
-                                             th:text="${factCheckResponse.confidencePercentage}">
-                                            0%
-                                        </div>
-                                    </div>
+                                    <span class="badge fs-6 px-3 py-2"
+                                          th:classappend="'bg-' + ${factCheckResponse.confidenceLevel.bootstrapClass}"
+                                          th:text="${factCheckResponse.confidenceLevelDisplay}">
+                                        Unknown
+                                    </span>
                                 </div>
                             </div>
 
@@ -185,9 +182,11 @@
                                             <div class="card-body py-2 px-3">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                                     <strong class="text-info" th:text="${evidence.source}">Source</strong>
-                                                    <small class="text-muted">
-                                                        Confidence: <span th:text="${evidence.confidencePercentage}">0%</span>
-                                                    </small>
+                                                    <span class="badge badge-sm"
+                                                          th:classappend="'bg-' + ${evidence.confidenceLevel.bootstrapClass}"
+                                                          th:text="${evidence.confidenceLevelDisplay}">
+                                                        Unknown
+                                                    </span>
                                                 </div>
                                                 <p class="mb-0 small" th:text="${evidence.content}">Evidence content</p>
                                             </div>
