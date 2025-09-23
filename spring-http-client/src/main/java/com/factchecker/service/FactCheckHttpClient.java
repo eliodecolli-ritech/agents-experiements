@@ -85,7 +85,7 @@ public class FactCheckHttpClient {
                     .bodyValue(httpRequest)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(10))
+                    .timeout(Duration.ofSeconds(timeoutSeconds))
                     .map(this::parseJsonContent)
                     .doOnSuccess(result -> logger.info("Classification completed: {}", result.get("statement_type")))
                     .onErrorResume(error -> {

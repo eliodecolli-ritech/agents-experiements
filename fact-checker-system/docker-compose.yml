@@ -29,6 +29,28 @@ services:
     networks:
       - fact_checker_network
 
+  # Fact Checker Application
+  fact-checker:
+    build: .
+    container_name: fact_checker_app
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - FACTCHECK_HOST=0.0.0.0
+      - FACTCHECK_PORT=8001
+    depends_on:
+      - mongodb
+      - qdrant
+    networks:
+      - fact_checker_network
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+
   # Optional: MongoDB Admin UI
   mongo-express:
     image: mongo-express:latest
