@@ -15,7 +15,7 @@ from google.genai.types import (
     GenerateContentConfig
 )
 from google.genai.client import Client
-from utils.ducksearch import DuckSearch
+from .utils.ducksearch import DuckSearch
 
 @dataclass(kw_only=True)
 class ToolCall:

@@ -29,7 +29,7 @@
             <i class="fas fa-server me-2"></i>
             <strong>Server Status:</strong> 
             <span th:text="${serverStatus.server}">Unknown</span>
-            <span th:if="${serverStatus.message}" th:text="' - ' + ${serverStatus.message}"></span>
+            <span th:if="${serverStatus.containsKey('message')}" th:text="' - ' + ${serverStatus.message}"></span>
             <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
 
@@ -98,7 +98,7 @@
 
                             <!-- Options -->
                             <div class="mb-3">
-                                <div class="form-check">
+                                <!--<div class="form-check">
                                     <input 
                                         class="form-check-input" 
                                         type="checkbox" 
@@ -108,7 +108,7 @@
                                         Use OpenAI for enhanced analysis
                                         <small class="text-muted">(More accurate but requires API key)</small>
                                     </label>
-                                </div>
+                                </div>-->
                             </div>
 
                             <!-- Submit Button -->
