@@ -30,7 +30,7 @@ public class FactCheckHttpClient {
     @Value("${factcheck.server.url:http://localhost:8001}")
     private String factCheckServerUrl;
     
-    @Value("${factcheck.client.timeout:30}")
+    @Value("${factcheck.server.timeout:300}")
     private int timeoutSeconds;
     
     public FactCheckHttpClient(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
@@ -85,7 +85,7 @@ public class FactCheckHttpClient {
                     .bodyValue(httpRequest)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
+                    .timeout(Duration.ofSeconds(timeoutSeconds / 2)) // Half timeout for classification
                     .map(this::parseJsonContent)
                     .doOnSuccess(result -> logger.info("Classification completed: {}", result.get("statement_type")))
                     .onErrorResume(error -> {

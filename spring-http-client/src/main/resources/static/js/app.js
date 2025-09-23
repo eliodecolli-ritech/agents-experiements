@@ -25,22 +25,41 @@ function initializeStatementClassification() {
     
     statementTextarea.addEventListener('input', function() {
         const statement = this.value.trim();
-        
+
         // Clear previous timeout
         clearTimeout(classificationTimeout);
-        
+
         // Hide preview if statement is too short
         if (statement.length < 10) {
             classificationPreview.style.display = 'none';
             return;
         }
-        
-        // Debounce classification requests
+
+        // Show immediate thinking state
+        showClassificationThinking();
+
+        // Debounce classification requests (reduced delay)
         classificationTimeout = setTimeout(() => {
             classifyStatement(statement);
-        }, 1000);
+        }, 300);
     });
-    
+
+    /**
+     * Show immediate classification thinking state
+     */
+    function showClassificationThinking() {
+        statementType.textContent = 'Analyzing...';
+        classificationDescription.textContent = 'Determining statement type and appropriate agents';
+        classificationPreview.style.display = 'block';
+
+        // Update alert class to show thinking state
+        const alertDiv = classificationPreview.querySelector('.alert');
+        alertDiv.className = 'alert alert-light';
+
+        // Add spinner icon
+        statementType.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Analyzing...';
+    }
+
     /**
      * Classify statement via AJAX
      */
@@ -128,54 +147,114 @@ function initializeFormSubmission() {
     if (!form || !submitBtn) return;
     
     form.addEventListener('submit', function(e) {
+        e.preventDefault(); // Prevent form submission
+
         // Add loading state
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Analyzing Statement...';
         document.body.classList.add('loading');
-        
+
         // Show progress indicator
         showProgressIndicator();
+
+        // Submit via AJAX
+        submitFormViaAjax(form);
     });
+
+    /**
+     * Submit form via AJAX to avoid page refresh
+     */
+    function submitFormViaAjax(form) {
+        const formData = new FormData(form);
+
+        fetch('/fact-check', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.text())
+        .then(html => {
+            // Hide thinking overlay
+            const overlay = document.getElementById('thinking-overlay');
+            if (overlay) overlay.remove();
+
+            // Parse response and update results section
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newResults = doc.querySelector('.card.shadow-sm:last-child');
+            const errorAlert = doc.querySelector('.alert-danger');
+
+            // Remove existing results
+            const existingResults = document.querySelector('.card.shadow-sm:last-child');
+            if (existingResults && existingResults.querySelector('.card-title').textContent.includes('Fact-Check Results')) {
+                existingResults.remove();
+            }
+
+            // Add new results or error
+            const container = document.querySelector('.col-lg-8');
+            if (newResults) {
+                container.appendChild(newResults);
+            } else if (errorAlert) {
+                container.appendChild(errorAlert);
+            }
+
+            // Reset form
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-search me-2"></i>Fact-Check Statement';
+            document.body.classList.remove('loading');
+        })
+        .catch(error => {
+            console.error('Fact-check request failed:', error);
+
+            // Hide overlay and show error
+            const overlay = document.getElementById('thinking-overlay');
+            if (overlay) overlay.remove();
+
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-search me-2"></i>Fact-Check Statement';
+            document.body.classList.remove('loading');
+
+            showToast('Fact-check request failed. Please try again.', 'danger');
+        });
+    }
 }
 
 /**
  * Show progress indicator during fact-checking
  */
 function showProgressIndicator() {
-    // Create progress modal or toast
-    const progressToast = document.createElement('div');
-    progressToast.className = 'toast align-items-center text-white bg-primary border-0';
-    progressToast.style.position = 'fixed';
-    progressToast.style.top = '20px';
-    progressToast.style.right = '20px';
-    progressToast.style.zIndex = '9999';
-    
-    progressToast.innerHTML = `
-        <div class="d-flex">
-            <div class="toast-body">
-                <i class="fas fa-spinner fa-spin me-2"></i>
-                Fact-checking in progress...
+    // Create persistent overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'thinking-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 10000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    `;
+
+    overlay.innerHTML = `
+        <div class="card border-0 shadow-lg" style="min-width: 300px;">
+            <div class="card-body text-center py-4">
+                <div class="mb-3">
+                    <i class="fas fa-search fa-3x text-primary"></i>
+                </div>
+                <p class="card-text text-muted mb-3">
+                    Analyzing your statement using AI agents
+                </p>
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
             </div>
         </div>
     `;
-    
-    document.body.appendChild(progressToast);
-    
-    // Initialize and show toast
-    const toast = new bootstrap.Toast(progressToast, {
-        autohide: false
-    });
-    toast.show();
-    
-    // Remove toast after form submission completes
-    setTimeout(() => {
-        toast.hide();
-        setTimeout(() => {
-            if (document.body.contains(progressToast)) {
-                document.body.removeChild(progressToast);
-            }
-        }, 300);
-    }, 1000);
+
+    document.body.appendChild(overlay);
 }
 
 /**

@@ -123,3 +123,16 @@ output/
 results/
 artifacts/
 spring-http-client/target/
+
+enhanced_rag_agent_detailed.md
+FACT_CHECKER_EXPLANATION.md
+wikipedia_agent_detailed.md
+LANGGRAPH_ORCHESTRATOR_DETAILED.md
+MCP_INTEGRATION_README.md
+FACT_CHECKABLE_STATEMENTS.md
+fact-checker-system/SETUP_GUIDE.md
+fact-checker/fact-check.ipynb
+fact-checker/.ipynb_checkpoints
+fact-checker/SETUP_GUIDE.md
+
+
