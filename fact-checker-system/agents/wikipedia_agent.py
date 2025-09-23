@@ -9,7 +9,13 @@ import json
 from typing import List, Dict, Any, Optional, Tuple
 from wikipediaapi import Wikipedia, ExtractFormat
 from dataclasses import dataclass
-import os
+from google.genai.types import (
+    ContentDict,
+    PartDict,
+    GenerateContentConfig
+)
+from google.genai.client import Client
+from utils.ducksearch import DuckSearch
 
 @dataclass(kw_only=True)
 class ToolCall:
@@ -35,98 +41,54 @@ class WikipediaVerificationResult:
 class FactCheckLLM:
     """Wrapper for LLM model operations - supports multiple models"""
     
-    def __init__(self, model_name: str = "google/gemma-3-4b-it"):
-        self.model_name = model_name
-        self.device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
-        
+    def __init__(self):
         # Authenticate with HuggingFace
         import os
         from dotenv import load_dotenv
         load_dotenv()
         
-        hf_token = os.getenv('HUGGINGFACE_TOKEN')
-        if not hf_token or hf_token == 'hf_your_token_here':
-            print("⚠️  WARNING: Set your HUGGINGFACE_TOKEN in .env file")
-            print("   Get token from: https://huggingface.co/settings/tokens")
-            print("   Request access: https://huggingface.co/google/gemma-3-4b-it")
-        
-        # Load Gemma model and processor
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            token=hf_token,
-            device_map="auto" if torch.cuda.is_available() else None
-        )
-        self.processor = AutoProcessor.from_pretrained(model_name, token=hf_token)
-        
-        if not torch.cuda.is_available():
-            self.model.to(self.device)
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        print(" -> Using Gemini Token:", gemini_key)
+
+        self.client = Client(api_key=gemini_key)
     
-    def generate_initial_input(self, user_prompt: str, system_prompt: str) -> List[Dict[str, Any]]:
+    def generate_initial_input(self, user_prompt: str) -> List[ContentDict]:
         """Generate initial chat input"""
         return [
-            {
-                "role": "system",
-                "content": [{
-                    "type": "text",
-                    "text": system_prompt,
-                }]
-            },
-            {
-                "role": "user", 
-                "content": [{
-                    "type": "text",
-                    "text": user_prompt
-                }]
-            }
+            ContentDict(role="user", parts=[PartDict(text=user_prompt)]),
         ]
     
-    def generate_followup_input(self, current_chat: List[Dict], agent_response: str, new_prompt: str) -> List[Dict]:
+    def generate_followup_input(self, current_chat: List[ContentDict], agent_response: str, new_prompt: str) -> List[ContentDict]:
         """Generate follow-up chat input"""
         followup = [
-            {
-                "role": "model",
-                "content": [{
-                    "type": "text",
-                    "text": agent_response,
-                }],
-            },
-            {
-                "role": "user",
-                "content": [{
-                    "type": "text", 
-                    "text": new_prompt,
-                }],
-            },
+            ContentDict(role="model", parts=[PartDict(text=agent_response)]),
+            ContentDict(role="user", parts=[PartDict(text=new_prompt)]),
         ]
         
         return current_chat + followup
     
     def ask_llm(self, user_prompt: str, current_chat: List[Dict] = None, 
-                agent_response: str = None, system_prompt: str = "") -> Tuple[str, List[Dict]]:
+                agent_response: str = None, system_prompt: str = "") -> Tuple[str, List[ContentDict]]:
         """Ask Gemma model for response"""
         
         if not current_chat:
-            prompt = self.generate_initial_input(user_prompt, system_prompt)
+            prompt = self.generate_initial_input(user_prompt)
         else:
             prompt = self.generate_followup_input(current_chat, agent_response, user_prompt)
         
-        inputs = self.processor.apply_chat_template(
-            prompt, add_generation_prompt=True, tokenize=True,
-            return_dict=True, return_tensors="pt"
-        ).to(self.device)
-        
-        input_len = inputs["input_ids"].shape[-1]
-        
-        with torch.inference_mode():
-            output = self.model.generate(**inputs, max_new_tokens=1024, do_sample=False)
-            response = self.processor.decode(output[0][input_len:], skip_special_tokens=True)
-            
+        llm_resp = self.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=GenerateContentConfig(system_instruction=system_prompt, temperature=0.2)
+        )
+        response = llm_resp.text
+
         return response, prompt
 
 class WikipediaAgent:
     """Wikipedia fact-checking agent"""
     
-    def __init__(self, model_name: str = "google/gemma-3-4b-it"):
+    def __init__(self):
         self.tools = {}
         self.current_chat = []
         # Configure Wikipedia library (matching original notebook)
@@ -136,14 +98,13 @@ class WikipediaAgent:
             extract_format=ExtractFormat.WIKI
         )
         
-        # Initialize LLM
-        self.llm = FactCheckLLM(model_name)
-        
         # Load system prompt
         self.system_prompt = self._load_system_prompt()
         
         # Initialize tools
         self.initialize()
+
+        self.llm = FactCheckLLM()
     
     def _load_system_prompt(self) -> str:
         """Load system prompt from markdown file"""
@@ -191,9 +152,21 @@ class WikipediaAgent:
                 return f"Wikipedia error for '{title}': {str(e)}"
         return inner_downloader
     
+    def _web_search(self):
+        def inner_web_search(query):
+            google_search = DuckSearch()
+            top = next((item for item in google_search.search(query + " wiki") if "wikipedia" in item["url"]), None)
+            if not top:
+                return "Nothing found on the web. Try with a different query; formulate the query with the intention to get a wikipedia article from the web search."
+            return top["title"]
+            
+
+        return inner_web_search
+    
     def initialize(self):
         """Initialize agent tools"""
         self.register_tool("wiki_retrieval", self._content_downloader())
+        self.register_tool("websearch", self._web_search())
     
     def tool_call(self, tool_name: str, **kwargs) -> str:
         """Execute a tool call"""
@@ -201,7 +174,7 @@ class WikipediaAgent:
         
         if tool_name in self.tools:
             result = self.tools[tool_name](**kwargs)
-            print(f"TOOL RESULT: {result[:100]}... ({len(result)} chars)")
+            print(f"TOOL RESULT: {result[:300]}... ({len(result)} chars)")
             return self._make_tool_result(result)
         
         return self._make_tool_result(f"Tool {tool_name} not found")
@@ -284,8 +257,12 @@ class WikipediaAgent:
         self.current_chat = chat
         
         # Process until final result
-        max_iterations = 10
+        max_iterations = 50
         iteration = 0
+
+        if not response:
+            print("Got nothing from LLM")
+            return
         
         while not (final := self.is_final_result(response)) and iteration < max_iterations:
             iteration += 1
@@ -294,9 +271,6 @@ class WikipediaAgent:
             # Handle tool calls
             if tool_call := self.is_tool_call(response):
                 result = self.tool_call(tool_name=tool_call.name, **tool_call.parameters)
-            elif thought := self.is_thought(response):
-                print(f"THINK: {thought}")
-                result = thought
             
             # Get next response
             response, _chat = self.llm.ask_llm(
@@ -305,9 +279,6 @@ class WikipediaAgent:
                 agent_response=response,
                 system_prompt=self.system_prompt
             )
-            
-            print(f"LLM RESPONSE: {response[:200]}...")
-            print("-" * 50)
             
             self.current_chat = _chat
         
@@ -329,9 +300,9 @@ class WikipediaAgent:
 # Example usage
 if __name__ == "__main__":
     agent = WikipediaAgent()
-    result = agent.process_fact_check("Neanderthals used to drive around in EVs")
+    result = agent.process_fact_check("Mozart could beat Bethoveen in a fist fight")
     
-    print("Final Result:")
+    print("------------")
     print(f"Verdict: {result.verdict}")
     print(f"Confidence: {result.confidence}")
-    print(f"Explanation: {result.explanation}")
+    print(f"Explanation: {result.context}")
