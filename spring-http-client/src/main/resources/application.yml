@@ -3,13 +3,14 @@
 spring:
   application:
     name: fact-checker-http-client
-  
+
   # Web Configuration
   web:
     resources:
-      cache:
-        cachecontrol:
-          max-age: 3600 # 1 hour for static resources
+      static-locations: classpath:/static/
+  mvc:
+    async:
+      request-timeout: 300000 # 5 minutes
   
   # Thymeleaf Configuration
   thymeleaf:
@@ -35,15 +36,18 @@ server:
     encoding:
       charset: UTF-8
       force: true
+  async:
+    request-timeout: 300000 # 5 minutes
 
 # Fact-Check Server Configuration
 factcheck:
   server:
     url: http://localhost:8001
-    timeout: 30 # seconds
+    timeout: 300 # seconds
   client:
     name: fact-checker-http-client
     version: 1.0.0
+    timeout: 120 # seconds - increased for Gemini processing
 
 # Logging Configuration
 logging:
@@ -88,10 +92,10 @@ spring:
   config:
     activate:
       on-profile: dev
-  
+
   thymeleaf:
     cache: false
-  
+
 logging:
   level:
     com.factchecker: DEBUG
@@ -100,14 +104,16 @@ logging:
 factcheck:
   server:
     url: http://localhost:8001
+  client:
+    timeout: 120 # Dev environment timeout
 
 ---
-# Production Profile  
+# Production Profile
 spring:
   config:
     activate:
       on-profile: prod
-      
+
   thymeleaf:
     cache: true
 
@@ -119,6 +125,8 @@ logging:
 factcheck:
   server:
     url: ${FACTCHECK_SERVER_URL:http://localhost:8001}
+  client:
+    timeout: 150 # Production timeout
 
 ---
 # Docker Profile
@@ -140,4 +148,4 @@ factcheck:
   server:
     url: ${FACTCHECK_SERVER_URL:http://fact-check-server:8001}
   client:
-    timeout: 60 # Longer timeout for Docker networking
+    timeout: 300 # Longer timeout for Docker networking

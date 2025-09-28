@@ -42,7 +42,6 @@ if [ ! -f "fact-checker-system/data/HRDataset_v14.csv" ]; then
     echo "⚠️  Continuing without dataset - pipelines will fail but infrastructure will start"
 fi
 
-echo ""
 echo "🔧 Starting infrastructure services..."
 echo "--------------------------------------"
 

@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import reactor.core.publisher.Mono;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -103,16 +104,17 @@ public class FactCheckController {
     @ResponseBody
     public Mono<Map<String, Object>> classifyStatement(@RequestBody Map<String, String> request) {
         String statement = request.get("statement");
-        
+
         if (statement == null || statement.trim().isEmpty()) {
             return Mono.just(Map.of("error", "Statement is required"));
         }
-        
+
         logger.info("Classifying statement via AJAX: {}", statement);
-        
+
         return httpClient.classifyStatement(statement.trim())
                 .doOnSuccess(result -> logger.debug("Classification result: {}", result))
-                .doOnError(error -> logger.error("Classification error", error));
+                .doOnError(error -> logger.error("Classification error", error))
+                .onErrorReturn(Map.of("error", "Classification failed"));
     }
     
     /**
@@ -125,10 +127,11 @@ public class FactCheckController {
         
         return httpClient.getServerStatus()
                 .map(status -> {
-                    // Add client-side information
-                    status.put("client_version", "1.0.0");
-                    status.put("client_status", "running");
-                    return status;
+                    // Create mutable copy and add client-side information
+                    Map<String, Object> mutableStatus = new HashMap<>(status);
+                    mutableStatus.put("client_version", "1.0.0");
+                    mutableStatus.put("client_status", "running");
+                    return mutableStatus;
                 })
                 .doOnSuccess(status -> logger.debug("Status response: {}", status));
     }

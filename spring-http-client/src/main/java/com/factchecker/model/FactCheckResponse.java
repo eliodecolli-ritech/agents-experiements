@@ -114,6 +114,14 @@ public class FactCheckResponse {
     public String getConfidencePercentage() {
         return confidence != null ? String.format("%.1f%%", confidence * 100) : "N/A";
     }
+
+    public ConfidenceLevel getConfidenceLevel() {
+        return ConfidenceLevel.fromNumeric(confidence);
+    }
+
+    public String getConfidenceLevelDisplay() {
+        return getConfidenceLevel().getDisplayName();
+    }
     
     @Override
     public String toString() {
@@ -174,6 +182,14 @@ public class FactCheckResponse {
         
         public String getConfidencePercentage() {
             return confidence != null ? String.format("%.1f%%", confidence * 100) : "N/A";
+        }
+
+        public ConfidenceLevel getConfidenceLevel() {
+            return ConfidenceLevel.fromNumeric(confidence);
+        }
+
+        public String getConfidenceLevelDisplay() {
+            return getConfidenceLevel().getDisplayName();
         }
     }
 }
