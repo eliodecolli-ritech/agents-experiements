@@ -301,8 +301,14 @@ class WikipediaAgent:
 if __name__ == "__main__":
     agent = WikipediaAgent()
     result = agent.process_fact_check("Mozart could beat Bethoveen in a fist fight")
-    
+
     print("------------")
     print(f"Verdict: {result.verdict}")
     print(f"Confidence: {result.confidence}")
     print(f"Explanation: {result.context}")
+
+    # DeepEval verdict evaluation example
+    # from evaluation.verdict_evaluator import evaluate_verdict
+    # ground_truth_verdict = "FALSE"  # Set your expected answer here
+    # eval_result = evaluate_verdict(result.verdict, ground_truth_verdict)
+    # print("DeepEval verdict evaluation:", eval_result)

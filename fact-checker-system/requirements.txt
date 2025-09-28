@@ -1,3 +1,4 @@
+deepeval
 # ZenML and ML Pipeline
 zenml[server]
 pymongo>=4.0.0
