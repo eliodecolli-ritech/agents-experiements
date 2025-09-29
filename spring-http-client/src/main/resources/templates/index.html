@@ -182,11 +182,13 @@
                                             <div class="card-body py-2 px-3">
                                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                                     <strong class="text-info" th:text="${evidence.source}">Source</strong>
+                                                    <!-- Evidence confidence hidden to avoid confusion with main confidence
                                                     <span class="badge badge-sm"
                                                           th:classappend="'bg-' + ${evidence.confidenceLevel.bootstrapClass}"
                                                           th:text="${evidence.confidenceLevelDisplay}">
                                                         Unknown
                                                     </span>
+                                                    -->
                                                 </div>
                                                 <p class="mb-0 small" th:text="${evidence.content}">Evidence content</p>
                                             </div>
