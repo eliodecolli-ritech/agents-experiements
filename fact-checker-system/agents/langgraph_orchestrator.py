@@ -1,15 +1,8 @@
 from langgraph.graph import StateGraph, END
 from langchain_community.llms import HuggingFacePipeline
+from langchain.prompts import ChatPromptTemplate
 from typing import Dict, Any
 import json
-import os
-from dotenv import load_dotenv
-from google.genai.client import Client
-from google.genai.types import (
-    ContentDict,
-    PartDict,
-    GenerateContentConfig
-)
 
 from agents.fact_check_state import FactCheckState, Evidence, FactCheckResult
 from agents.enhanced_rag_agent import EnhancedRAGAgent
@@ -19,25 +12,19 @@ class LangGraphFactChecker:
     """LangGraph-based fact-checking orchestrator with fine-tuning support"""
     
     def __init__(self, use_openai: bool = False):
-        # Option 1: Use Gemini (requires API key, costs money)
-        # Option 2: Use simple rules (free, but limited)
-
+        # Option 1: Use OpenAI (requires API key, costs money)
+        # Option 2: Use local Gemma (free, but needs RAM)
+        
         if use_openai:
-            # Load environment variables
-            load_dotenv()
-            gemini_key = os.getenv("GEMINI_API_KEY")
-            if not gemini_key:
-                raise ValueError("GEMINI_API_KEY not found in environment variables")
-
-            self.gemini_client = Client(api_key=gemini_key)
-            self.llm = "gemini"  # Flag to indicate we're using Gemini
-            self.wikipedia_agent = WikipediaAgent()
+            from langchain_openai import ChatOpenAI
+            import os
+            self.llm = ChatOpenAI(model="gpt-5-nano", temperature=0)
+            self.wikipedia_agent = WikipediaAgent("microsoft/DialoGPT-small")  # Lighter model
         else:
             # Use simple rule-based classification instead of LLM for now
-            self.gemini_client = None
             self.llm = None  # We'll use simple rules
-            self.wikipedia_agent = WikipediaAgent()
-
+            self.wikipedia_agent = WikipediaAgent("google/gemma-3-4b-it")
+        
         self.rag_agent = EnhancedRAGAgent()
         self.use_openai = use_openai
         
@@ -96,34 +83,61 @@ class LangGraphFactChecker:
     
     def _classify_statement(self, state: FactCheckState) -> FactCheckState:
         """Classify the type of statement using rules or LLM"""
-
-        if self.use_openai and self.gemini_client:
-            # Use Gemini for classification
-            classification_prompt = f"""
+        
+        if self.use_openai and self.llm:
+            # Use LLM classification
+            classification_prompt = ChatPromptTemplate.from_template("""
             Classify this statement for fact-checking routing:
-
-            Statement: {state["statement"]}
-
+            
+            Statement: {statement}
+            
             Classify as one of:
             - 'private_data': About company/employee internal data (e.g., "Our sales team performance", "Company has 200 employees")
-            - 'public_knowledge': About general/historical facts (e.g., "Neanderthals used EVs", "Tesla founded in 2003")
+            - 'public_knowledge': About general/historical facts (e.g., "Neanderthals used EVs", "Tesla founded in 2003")  
             - 'mixed': Requires both private and public data
-
+            
             Respond with just the classification.
-            """
-
-            # Create Gemini request
-            contents = [ContentDict(role="user", parts=[PartDict(text=classification_prompt)])]
-
-            response = self.gemini_client.models.generate_content(
-                model="gemini-2.0-flash-exp",
-                contents=contents,
-                config=GenerateContentConfig(temperature=0.1)
-            )
-
-            state["statement_type"] = response.text.strip().lower()
+            """)
+            
+            chain = classification_prompt | self.llm
+            result = chain.invoke({"statement": state["statement"]})
+            
+            state["statement_type"] = result.content.strip().lower()
         else:
-            raise ValueError("No LLM configured")
+            # Use simple rule-based classification
+            statement_lower = state["statement"].lower()
+            
+            # Company/employee keywords
+            private_keywords = [
+                "our company", "our employees", "our department", "our sales",
+                "company", "employees", "department", "salary", "performance", 
+                "engagement", "workforce", "staff", "team", "males", "females",
+                "gender", "average salary", "more than", "less than", "exactly",
+                "production", "it", "sales", "hr", "finance", "engineering"
+            ]
+            
+            # Public knowledge keywords  
+            public_keywords = [
+                "neanderthals", "electric vehicle", "tesla", "history", "world", 
+                "country", "famous", "invention", "discovery", "science"
+            ]
+            
+            private_score = sum(1 for keyword in private_keywords if keyword in statement_lower)
+            public_score = sum(1 for keyword in public_keywords if keyword in statement_lower)
+            
+            # Better mixed detection
+            has_company_terms = any(term in statement_lower for term in ["our company", "our", "company"])
+            has_public_entities = any(term in statement_lower for term in ["tesla", "neanderthals", "founded", "history"])
+            
+            if has_company_terms and has_public_entities:
+                state["statement_type"] = "mixed"
+            elif private_score > 0:
+                state["statement_type"] = "private_data"  
+            elif public_score > 0 or has_public_entities:
+                state["statement_type"] = "public_knowledge"
+            else:
+                # Default to mixed if unclear
+                state["statement_type"] = "mixed"
         
         state["errors"] = []
         state["retry_count"] = 0
@@ -236,73 +250,52 @@ class LangGraphFactChecker:
         rag_ev = state.get("rag_evidence", [])
         wiki_ev = state.get("wikipedia_evidence", [])
         
-        if self.use_openai and self.gemini_client:
-            # Use Gemini for analysis
-            analysis_prompt = f"""
+        if self.use_openai and self.llm:
+            # Use LLM analysis with Neil deGrasse Tyson style
+            neil_style = (
+                "You are Neil deGrasse Tyson, the renowned astrophysicist and science communicator. "
+                "Respond to the following claim with scientific rigor, clarity, and evidence-based reasoning. "
+                "Make your explanation educational and accessible, focusing on truth and verifiable facts. "
+                "If the claim references 'studies' or external sources, require explicit citations or verifiable data. If no credible source is provided, state that the claim cannot be verified."
+            )
+            analysis_prompt = ChatPromptTemplate.from_template(f"""
+            {neil_style}
+
             Analyze this statement for fact-checking:
 
-            Statement: {state["statement"]}
+            Statement: {{statement}}
 
             Evidence collected:
-            RAG Evidence: {[ev.content for ev in rag_ev] if rag_ev else ["No RAG evidence found"]}
-            Wikipedia Evidence: {[ev.content for ev in wiki_ev] if wiki_ev else ["No Wikipedia evidence found"]}
+            RAG Evidence: {{rag_evidence}}
+            Wikipedia Evidence: {{wikipedia_evidence}}
 
             Provide a verdict (TRUE/FALSE/MISLEADING/UNVERIFIED/NEEDS_CONTEXT) and confidence score (0-1).
             Explain your reasoning based on the evidence.
 
-            IMPORTANT: Respond ONLY with valid JSON in this exact format (no additional text or markdown):
-            {{
-                "verdict": "TRUE|FALSE|MISLEADING|UNVERIFIED|NEEDS_CONTEXT",
+            Format as JSON:
+            {{{{
+                "verdict": "verdict_here",
                 "confidence": 0.0,
-                "reasoning": "your explanation here"
-            }}
-            """
-
-            # Create Gemini request
-            contents = [ContentDict(role="user", parts=[PartDict(text=analysis_prompt)])]
-
-            response = self.gemini_client.models.generate_content(
-                model="gemini-2.0-flash-exp",
-                contents=contents,
-                config=GenerateContentConfig(
-                    temperature=0.1,
-                    system_instruction="You are a fact-checking AI. Always respond with valid JSON only, no additional text."
-                )
-            )
-
+                "reasoning": "explanation here"
+            }}}}
+            """)
+            
+            chain = analysis_prompt | self.llm
+            result = chain.invoke({
+                "statement": state["statement"],
+                "rag_evidence": [ev.content for ev in rag_ev],
+                "wikipedia_evidence": [ev.content for ev in wiki_ev]
+            })
+            
             try:
-                # Extract JSON from Gemini response (might be wrapped in markdown)
-                response_text = response.text.strip()
-
-                # Try to extract JSON from code blocks if present
-                if "```json" in response_text:
-                    start = response_text.find("```json") + 7
-                    end = response_text.find("```", start)
-                    if end != -1:
-                        response_text = response_text[start:end].strip()
-                elif "```" in response_text:
-                    start = response_text.find("```") + 3
-                    end = response_text.find("```", start)
-                    if end != -1:
-                        response_text = response_text[start:end].strip()
-
-                # Try to find JSON object in the text
-                if "{" in response_text and "}" in response_text:
-                    start = response_text.find("{")
-                    end = response_text.rfind("}") + 1
-                    response_text = response_text[start:end]
-
-                analysis = json.loads(response_text)
-                verdict = analysis.get("verdict", "NEEDS_CONTEXT")
-                confidence = analysis.get("confidence", 0.5)
-                reasoning = analysis.get("reasoning", "Gemini analysis completed")
-
-            except Exception as e:
-                print(f"Gemini JSON parsing error: {e}")
-                print(f"Raw response: {response.text[:500]}...")
+                analysis = json.loads(result.content)
+                verdict = analysis["verdict"]
+                confidence = analysis["confidence"]
+                reasoning = analysis["reasoning"]
+            except:
                 verdict = "NEEDS_CONTEXT"
                 confidence = 0.5
-                reasoning = f"Gemini analysis failed (JSON parse error): {str(e)[:100]}"
+                reasoning = "LLM analysis failed, using fallback verdict"
         else:
             # Simple rule-based analysis
             if rag_ev and wiki_ev:
@@ -421,14 +414,14 @@ if __name__ == "__main__":
     
     # Choose your setup:
     print("💡 Choose setup:")
-    print("1. Local only (free, uses rule-based)")
-    print("2. With Gemini (costs money, needs API key)")
-
+    print("1. Local only (free, uses Gemma)")  
+    print("2. With OpenAI (costs money, needs API key)")
+    
     # For now, default to local
-    use_openai = True  # Change to True if you want Gemini
-
+    use_openai = True  # Change to True if you want OpenAI
+    
     if use_openai:
-        print("🌐 Using Gemini 2.0 Flash + lighter local model")
+        print("🌐 Using OpenAI GPT-4 + lighter local model")
     else:
         print("🏠 Using local models only (rule-based classification)")
     
